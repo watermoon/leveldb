@@ -7,23 +7,33 @@ somewhat different and is explained below.
 
 Each database is represented by a set of files stored in a directory. There are
 several different types of files as documented below:
+每个数据库的文件都存在在一个目录下。如下文所示, 有数种不通的文件类型:
 
 ### Log files
-
+### 日志文件
 A log file (*.log) stores a sequence of recent updates. Each update is appended
 to the current log file. When the log file reaches a pre-determined size
 (approximately 4MB by default), it is converted to a sorted table (see below)
 and a new log file is created for future updates.
+一个日志文件 (*.log) 存储了一系列的最近更新。每一个更新都是通过追加的方式添加到当前日志文件
+中。当日志文件得到一个预设的大小(默认大约是 4MB) 时, 它会被转换成一个有序表
+(sorted table, 见下文), 并且创建一个新的日志文件用于后续的更新。
 
 A copy of the current log file is kept in an in-memory structure (the
 `memtable`). This copy is consulted on every read so that read operations
 reflect all logged updates.
+当前日志文件的一个拷贝也会以 `memtable` 的数据结构保存在内存中。每一个读操作都
+会查询这个拷贝, 所以读操作反应了所有的已记录的更新。
 
 ## Sorted tables
+## 有序表
 
 A sorted table (*.ldb) stores a sequence of entries sorted by key. Each entry is
 either a value for the key, or a deletion marker for the key. (Deletion markers
 are kept around to hide obsolete values present in older sorted tables).
+一个有序表 (*.ldb) 存储了以 key 进行进行排序的一系列条目(entry)。每一个条目只有两种
+情况: key 对应的值, 或者一个删除标记。(保留删除标记是为了隐藏那些在更旧的有序表中出现的
+过时的值.)
 
 The set of sorted tables are organized into a sequence of levels. The sorted
 table generated from a log file is placed in a special **young** level (also
@@ -31,6 +41,10 @@ called level-0). When the number of young files exceeds a certain threshold
 (currently four), all of the young files are merged together with all of the
 overlapping level-1 files to produce a sequence of new level-1 files (we create
 a new level-1 file for every 2MB of data.)
+有序表集合被组织成一系列的 level。从日志文件生成的有序表被放在一个特殊的**年轻**层
+(也叫 level-0)。当年轻层的文件数量超过一个特定的阈值(当前是 4), 所有的年轻(层)文件将会和
+所有的 level-1 的重叠(指 key 相同)文件进行合并, 并生成新的 level-1 文件 (每 2MB 的
+数据会创建一个新的 level-1 文件)。
 
 Files in the young level may contain overlapping keys. However files in other
 levels have distinct non-overlapping key ranges. Consider level number L where
@@ -40,32 +54,51 @@ overlapping files in level-(L+1) are merged to form a set of new files for
 level-(L+1). These merges have the effect of gradually migrating new updates
 from the young level to the largest level using only bulk reads and writes
 (i.e., minimizing expensive seeks).
+年轻层的文件中可能包含重叠的的 key。然而其他层的文件里包含的确实不重叠的 key 范围。我们来
+考虑第 L（L >= 1) 层的情况:
+当 level-L 的所有文件大小之和超过了 (10^L) MB (例如 level-1 10MB, level-2 100MB, ...),
+level-L 中的一个文件, 和下一层 Level-(L+1) 的所有文件进行合并形成了一个新的 level-(L+1) 
+文件集合。这些合并可以使得仅仅通过块读和写就能让新的更新从年轻层逐渐迁移到最大的层。(最小化
+代价高昂的查找)
 
 ### Manifest
+### 清单文件
 
 A MANIFEST file lists the set of sorted tables that make up each level, the
 corresponding key ranges, and other important metadata. A new MANIFEST file
 (with a new number embedded in the file name) is created whenever the database
 is reopened. The MANIFEST file is formatted as a log, and changes made to the
 serving state (as files are added or removed) are appended to this log.
+一个清单文件列出了构成每一层的有序表, 对应的 key 范围, 和其它重要的元数据。当数据库被重新
+打开时, 会创建一个新的清单文件(一个新的号码会嵌在文件名中)。一个清单文件被格式化成类似于
+一个日志, 服务状态的修改(例如文件被添加或者删除)都会被追加到这个日志中。
 
 ### Current
+### 当前文件
 
 CURRENT is a simple text file that contains the name of the latest MANIFEST
 file.
+当前文件是一个包含了最新清单文件的文本文件。
 
 ### Info logs
+### 信息日志
 
 Informational messages are printed to files named LOG and LOG.old.
+信息性的消息会打印到命名为 LOG 和 LOG.old 的文件中。
 
 ### Others
+### 其它
 
 Other files used for miscellaneous purposes may also be present (LOCK, *.dbtmp).
+其它用于各式各样的目的的文件也可能会存在 (LOCK, *.dbtmp)。
 
 ## Level 0
+## 零层 (Level 0)
 
 When the log file grows above a certain size (4MB by default):
 Create a brand new memtable and log file and direct future updates here.
+当日志文件增长到一个特定的大小 (默认 4MB): 创建一个包含新的 memtable 和日志文件分支, 
+后面所有的更新都到新的分支去。
 
 In the background:
 
@@ -74,7 +107,14 @@ In the background:
 3. Delete the old log file and the old memtable.
 4. Add the new sstable to the young (level-0) level.
 
+在后台:
+1. 将之前的 memtable 的内容写到一个 sstable 中
+2. 丢弃 memtable
+3. 删除旧的日志文件和旧的 memtable
+4. 将新的 sstable 添加到年轻层 (level-0)
+
 ## Compactions
+## 压缩
 
 When the size of level L exceeds its limit, we compact it in a background
 thread. The compaction picks a file from level L and all overlapping files from
@@ -84,6 +124,12 @@ compaction and will be discarded after the compaction.  Aside: because level-0
 is special (files in it may overlap each other), we treat compactions from
 level-0 to level-1 specially: a level-0 compaction may pick more than one
 level-0 file in case some of these files overlap each other.
+如果 level L 的大小超过的它的限制, 我们会在一个后台线程压缩它。压缩过程会在 level L
+挑选一个文件, 和从下一层 L+1 挑选所有的交叠文件。注意到, 如果 lelvel-L 文件仅部分交叠
+level-(L+1)的某个文件, 那么 level-(L+1)的整个文件都会作为压缩过程的输入, 并且会在压缩
+后被丢弃。此外: 因为 level-0 是特殊的(这一层的文件可能会互相交叠), 我们特殊处理 level-0
+到 level-1 的压缩: 一个 level-0 的压缩可能会挑选多于一个的 level-0 文件, 以防可能的
+这些文件相互交叠。
 
 A compaction merges the contents of the picked files to produce a sequence of
 level-(L+1) files. We switch to producing a new level-(L+1) file after the
@@ -92,23 +138,36 @@ new output file when the key range of the current output file has grown enough
 to overlap more than ten level-(L+2) files.  This last rule ensures that a later
 compaction of a level-(L+1) file will not pick up too much data from
 level-(L+2).
+压缩过程将挑选的文件内容进行合并来产生一些列的 level-(L+1) 文件。在当前的输出文件达到目标
+文件大小(2MB)后, 我们会转向生成一个新的 level-(L+1)文件。在新生成的文件包含的 key 范围增
+长到会和超过 10 个 level-(L+2)文件交叠时, 我们也会转向生成新的输出文件。后面那条规则保证
+了将来在压缩 level-(L+1) 文件时, 不会从 level-(L+2)挑选太多的文件。
 
 The old files are discarded and the new files are added to the serving state.
+旧文件会被丢弃, 新文件会加入到服务状态。
 
 Compactions for a particular level rotate through the key space. In more detail,
 for each level L, we remember the ending key of the last compaction at level L.
 The next compaction for level L will pick the first file that starts after this
 key (wrapping around to the beginning of the key space if there is no such
 file).
+对于一个特定层的压缩, 压缩会在 key 空间中循环。详细地说就是, 对于每一层 L, 我们记录上一次压缩
+的结束 key。那么下一次在 level L 进行压缩时, 我们会选择在这个 key 之后的第一个文件(如果不存
+在这样的文件, 那么就环绕到 key 空间的开头进行)。
 
 Compactions drop overwritten values. They also drop deletion markers if there
 are no higher numbered levels that contain a file whose range overlaps the
 current key.
+压缩会丢弃覆盖写的值。如果没有更高层(层级数字更大, 即更旧的)的文件 key 范围交叠的 key, 那
+么这个 key 的删除标记也会被丢弃。
 
 ### Timing
+### 时序(此翻译还需要考虑一下)
 
 Level-0 compactions will read up to four 1MB files from level-0, and at worst
 all the level-1 files (10MB). I.e., we will read 14MB and write 14MB.
+Level-0 的压缩最多从 level-0 读 4 个 1MB 的文件, 且最差的情况读所有的 level-1 文件(10MB)。
+例如, 我们会读 14MB 和写 14MB(文件)。
 
 Other than the special level-0 compactions, we will pick one 2MB file from level
 L. In the worst case, this will overlap ~ 12 files from level L+1 (10 because
@@ -117,6 +176,11 @@ since the file ranges at level-L will usually not be aligned with the file
 ranges at level-L+1). The compaction will therefore read 26MB and write 26MB.
 Assuming a disk IO rate of 100MB/s (ballpark range for modern drives), the worst
 compaction cost will be approximately 0.5 second.
+除了特殊的 level-0 压缩, 我们会从 level-L 挑一个 2MB 的文件。在最差的情况下, 这个文件会
+和大约 12 个 L+1 层的文件交叠(10 因为 level-(L+1) 是 level-L 的十倍大小, 加上边界的
+两个(一左一右), 因为 level-L 文件的 (key) 范围通常不会和 level-(L+1) 的对齐)。因此压缩
+会读和写 26MB (文件)。假设磁盘 IO 率是 100MB/s(现代驱动的大致范围), 最差的压缩会消耗大约
+0.5s。
 
 If we throttle the background writing to something small, say 10% of the full
 100MB/s speed, a compaction may take up to 5 seconds. If the user is writing at
