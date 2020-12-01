@@ -187,29 +187,42 @@ If we throttle the background writing to something small, say 10% of the full
 10MB/s, we might build up lots of level-0 files (~50 to hold the 5*10MB). This
 may significantly increase the cost of reads due to the overhead of merging more
 files together on every read.
+如果我们压缩后台写(速度)到一个较小的值, 例如全速 100MB/s 的 10%, 一次压缩可能会需要消耗 5 秒。
+如果用户以 10MB/s 的速度写入(levelDB), 我们可能会产生很多的 level-0 文件 (约 50 个来保存
+5 * 10MB)。由于每次读会进行文件合并, 这可能会明显地增加每次读消耗。
 
 Solution 1: To reduce this problem, we might want to increase the log switching
 threshold when the number of level-0 files is large. Though the downside is that
 the larger this threshold, the more memory we will need to hold the
 corresponding memtable.
+解决办法 1: 为了降低这个问题, 我们可能希望在 level-0 的文件数量很大的时候增加日志切换的阈值。
+尽管缺点是阈值雨大, 我们将需要越多的内存来保存对应的 memtable。
 
 Solution 2: We might want to decrease write rate artificially when the number of
 level-0 files goes up.
+解决办法 2: 随着 level-0 文件数量的增长, 我们可能希望人为地降低写的速率。
 
 Solution 3: We work on reducing the cost of very wide merges. Perhaps most of
 the level-0 files will have their blocks sitting uncompressed in the cache and
 we will only need to worry about the O(N) complexity in the merging iterator.
+解决办法 3: 我们设法降低每一次广范围的合并消耗。可能大部分的 level-0 文件会有未压缩的块在
+缓存中, 我们仅需要考虑合并迭代器中的 O(N) 复杂度。
+
 
 ### Number of files
+### 文件数量
 
 Instead of always making 2MB files, we could make larger files for larger levels
 to reduce the total file count, though at the expense of more bursty
 compactions.  Alternatively, we could shard the set of files into multiple
 directories.
+我们可以在更大的层级创建更大的文件而不是总是创建 2MB 大小的文件, 来降低总的文件数量, 尽管会
+导致更多突发性的压缩消耗。另外, 我们也可以将文件集分片到多个目录。
 
 An experiment on an ext3 filesystem on Feb 04, 2011 shows the following timings
 to do 100K file opens in directories with varying number of files:
-
+一次 2011 年 2 约 4 日在 ext3 文件系统上的试验显示了一个目录下不同数量的文件的 100K 次文件
+打开操作的时间消耗:
 
 | Files in directory | Microseconds to open a file |
 |-------------------:|----------------------------:|
@@ -218,8 +231,10 @@ to do 100K file opens in directories with varying number of files:
 |             100000 |                          16 |
 
 So maybe even the sharding is not necessary on modern filesystems?
+所以可能实际上在现代文件系统中分片是不必要的？
 
 ## Recovery
+## 恢复
 
 * Read CURRENT to find name of the latest committed MANIFEST
 * Read the named MANIFEST file
@@ -228,9 +243,20 @@ So maybe even the sharding is not necessary on modern filesystems?
 * Convert log chunk to a new level-0 sstable
 * Start directing new writes to a new log file with recovered sequence#
 
+* 读取 CURRENT 文件来找到最后提交的 MANIFEST(文件清单)的文件名
+* 读取(上一步得到的)文件清单文件
+* 清除陈旧的文件
+* 我们可以此时打开所有的 sstables, 不过可能更好的是偷懒一下(延迟打开)
+* 将日志块转换成一个新的 level-0 sstable
+* 开始引导将新的写操作写入到恢复后的 sequence# 的新日志文件
+
 ## Garbage collection of files
+## 文件的垃圾回收
 
 `RemoveObsoleteFiles()` is called at the end of every compaction and at the end
 of recovery. It finds the names of all files in the database. It deletes all log
 files that are not the current log file. It deletes all table files that are not
 referenced from some level and are not the output of an active compaction.
+`RemoveObsoleteFiles()` 会在每一次压缩的最后和恢复的最后被调用。它会找到数据库的所有文件的
+文件名。它会删除所有不是当前日志文件的文件。它会删除所有不被任何层级引用的和不是一次活跃压缩的输
+出的的表文件。
