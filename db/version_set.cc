@@ -880,6 +880,7 @@ Status VersionSet::Recover(bool* save_manifest) {
 
   std::string dscname = dbname_ + "/" + current;
   SequentialFile* file;
+  // 读取当前 manifest 文件(用一个顺序读取的文件对象)
   s = env_->NewSequentialFile(dscname, &file);
   if (!s.ok()) {
     if (s.IsNotFound()) {
@@ -906,11 +907,12 @@ Status VersionSet::Recover(bool* save_manifest) {
                        0 /*initial_offset*/);
     Slice record;
     std::string scratch;
+    // 逐个读取 manifest 中的记录(每个记录是一个有 VersionEdit 编码成的 Record)
     while (reader.ReadRecord(&record, &scratch) && s.ok()) {
       VersionEdit edit;
       s = edit.DecodeFrom(record);
       if (s.ok()) {
-        if (edit.has_comparator_ &&
+        if (edit.has_comparator_ && // 校验 comparator 的名字是否相等
             edit.comparator_ != icmp_.user_comparator()->Name()) {
           s = Status::InvalidArgument(
               edit.comparator_ + " does not match existing comparator ",
@@ -919,7 +921,7 @@ Status VersionSet::Recover(bool* save_manifest) {
       }
 
       if (s.ok()) {
-        builder.Apply(&edit);
+        builder.Apply(&edit); // 应用读到的每一个版本
       }
 
       if (edit.has_log_number_) {

@@ -70,6 +70,7 @@ class LEVELDB_EXPORT DB {
   // success, and a non-OK status on error.  It is not an error if "key"
   // did not exist in the database.
   // Note: consider setting options.sync = true.
+  // "key" 不存在不是一个错误
   virtual Status Delete(const WriteOptions& options, const Slice& key) = 0;
 
   // Apply the specified updates to the database.
@@ -90,9 +91,11 @@ class LEVELDB_EXPORT DB {
   // Return a heap-allocated iterator over the contents of the database.
   // The result of NewIterator() is initially invalid (caller must
   // call one of the Seek methods on the iterator before using it).
+  // 需要先调用任意一种 Seek 方法后才能使用
   //
   // Caller should delete the iterator when it is no longer needed.
   // The returned iterator should be deleted before this db is deleted.
+  // 迭代器需要在 db 之前释放
   virtual Iterator* NewIterator(const ReadOptions& options) = 0;
 
   // Return a handle to the current DB state.  Iterators created with
@@ -125,6 +128,7 @@ class LEVELDB_EXPORT DB {
 
   // For each i in [0,n-1], store in "sizes[i]", the approximate
   // file system space used by keys in "[range[i].start .. range[i].limit)".
+  // 指定范围的 key 占用的文件系统空间的估算值
   //
   // Note that the returned sizes measure file system space usage, so
   // if the user data compresses by a factor of ten, the returned

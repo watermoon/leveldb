@@ -72,13 +72,14 @@ serving state (as files are added or removed) are appended to this log.
 一个清单文件列出了构成每一层的有序表, 对应的 key 范围, 和其它重要的元数据。当数据库被重新
 打开时, 会创建一个新的清单文件(一个新的号码会嵌在文件名中)。一个清单文件被格式化成类似于
 一个日志, 服务状态的修改(例如文件被添加或者删除)都会被追加到这个日志中。
+`VersionEdit`编码成一个日志记录(Record)写到 Manifest 文件中
 
 ### Current
 ### 当前文件
 
 CURRENT is a simple text file that contains the name of the latest MANIFEST
 file.
-当前文件是一个包含了最新清单文件的文本文件。
+当前文件是一个包含了最新清单文件的文本文件。`SetCurrentFile@db/filename.cc`
 
 ### Info logs
 ### 信息日志

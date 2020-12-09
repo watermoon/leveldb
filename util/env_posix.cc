@@ -277,12 +277,14 @@ class PosixWritableFile final : public WritableFile {
     }
 
     // Can't fit in buffer, so need to do at least one write.
+    // 无法全部放到 buffer 里了, 所以最少需要一次写操作
     Status status = FlushBuffer();
     if (!status.ok()) {
       return status;
     }
 
     // Small writes go to buffer, large writes are written directly.
+    // 少量数据放到 buffer, 大量数据直接写文件
     if (write_size < kWritableFileBufferSize) {
       std::memcpy(buf_, write_data, write_size);
       pos_ = write_size;

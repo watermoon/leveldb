@@ -20,6 +20,7 @@ bytes and must be skipped by readers.
 一个记录永远不会在一个块的最后六个字节之内开始(因为不会匹配, 因为 checksum + length 已经
 六个字节, 还有类型一个字节, 所以最少得有七个字节)。任何这里残留的字节都会作为尾部,
 必须全部都是 0, 且必须被阅读器跳过。
+`AddRecord@db/log_writer.cc`
 
 Aside: if exactly seven bytes are left in the current block, and a new non-zero
 length record is added, the writer must emit a FIRST record (which contains zero

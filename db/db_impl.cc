@@ -185,9 +185,10 @@ Status DBImpl::NewDB() {
   new_db.SetNextFile(2);
   new_db.SetLastSequence(0);
 
+  // 新数据库的清单文件 dbname/MANIFEST-000001
   const std::string manifest = DescriptorFileName(dbname_, 1);
   WritableFile* file;
-  Status s = env_->NewWritableFile(manifest, &file);
+  Status s = env_->NewWritableFile(manifest, &file); // PosixWritableFile/WindowsWritableFile
   if (!s.ok()) {
     return s;
   }
@@ -316,6 +317,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
     }
   }
 
+  // 从 manifest 文件中恢复版本集
   s = versions_->Recover(save_manifest);
   if (!s.ok()) {
     return s;
@@ -1482,10 +1484,12 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
   impl->mutex_.Lock();
   VersionEdit edit;
   // Recover handles create_if_missing, error_if_exists
+  // Recover 函数处理如果不存在则创建(db), 如果存在则报错的问题
   bool save_manifest = false;
   Status s = impl->Recover(&edit, &save_manifest);
   if (s.ok() && impl->mem_ == nullptr) {
     // Create new log and a corresponding memtable.
+    // 创建新的日志和对应的 memtable
     uint64_t new_log_number = impl->versions_->NewFileNumber();
     WritableFile* lfile;
     s = options.env->NewWritableFile(LogFileName(dbname, new_log_number),

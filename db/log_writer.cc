@@ -31,6 +31,7 @@ Writer::Writer(WritableFile* dest, uint64_t dest_length)
 
 Writer::~Writer() = default;
 
+// 文档 log_format.md 
 Status Writer::AddRecord(const Slice& slice) {
   const char* ptr = slice.data();
   size_t left = slice.size();
@@ -45,7 +46,7 @@ Status Writer::AddRecord(const Slice& slice) {
     assert(leftover >= 0);
     if (leftover < kHeaderSize) {
       // Switch to a new block
-      if (leftover > 0) {
+      if (leftover > 0) { // 当前 block 余下的可用空间不足 7 字节, 全部填充 0
         // Fill the trailer (literal below relies on kHeaderSize being 7)
         static_assert(kHeaderSize == 7, "");
         dest_->Append(Slice("\x00\x00\x00\x00\x00\x00", leftover));
@@ -61,6 +62,7 @@ Status Writer::AddRecord(const Slice& slice) {
 
     RecordType type;
     const bool end = (left == fragment_length);
+    // FULL/FIRST/MIDDLE/LAST 类型的记录
     if (begin && end) {
       type = kFullType;
     } else if (begin) {
@@ -86,8 +88,8 @@ Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr,
 
   // Format the header
   char buf[kHeaderSize];
-  buf[4] = static_cast<char>(length & 0xff);
-  buf[5] = static_cast<char>(length >> 8);
+  buf[4] = static_cast<char>(length & 0xff); // 小端, 先低字节
+  buf[5] = static_cast<char>(length >> 8);   // 后高字节
   buf[6] = static_cast<char>(t);
 
   // Compute the crc of the record type and the payload.
@@ -100,7 +102,7 @@ Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr,
   if (s.ok()) {
     s = dest_->Append(Slice(ptr, length));
     if (s.ok()) {
-      s = dest_->Flush();
+      s = dest_->Flush(); // 每一个 record 都会 flush 一次
     }
   }
   block_offset_ += kHeaderSize + length;

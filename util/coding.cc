@@ -18,19 +18,23 @@ void PutFixed64(std::string* dst, uint64_t value) {
   dst->append(buf, sizeof(buf));
 }
 
+/**
+ * 每个字节的低 7 位用来保存数据, 最高位用来表示是否还有下一个字节。真妙!
+ * VarintLength 函数则用来获取整数的长度(字节数)
+ */
 char* EncodeVarint32(char* dst, uint32_t v) {
   // Operate on characters as unsigneds
   uint8_t* ptr = reinterpret_cast<uint8_t*>(dst);
   static const int B = 128;
-  if (v < (1 << 7)) {
+  if (v < (1 << 7)) {  // v 小于 1<<7 (128)
     *(ptr++) = v;
-  } else if (v < (1 << 14)) {
-    *(ptr++) = v | B;
-    *(ptr++) = v >> 7;
+  } else if (v < (1 << 14)) { // v 大于 128, 但小于 1 << 14 (16384), 二进制不足 15 位
+    *(ptr++) = v | B;  // 低 7 位
+    *(ptr++) = v >> 7; // 高 7 位
   } else if (v < (1 << 21)) {
-    *(ptr++) = v | B;
-    *(ptr++) = (v >> 7) | B;
-    *(ptr++) = v >> 14;
+    *(ptr++) = v | B; // 低 7 位
+    *(ptr++) = (v >> 7) | B; // 中 7 位
+    *(ptr++) = v >> 14; // 高 7 位
   } else if (v < (1 << 28)) {
     *(ptr++) = v | B;
     *(ptr++) = (v >> 7) | B;
@@ -89,9 +93,9 @@ const char* GetVarint32PtrFallback(const char* p, const char* limit,
   for (uint32_t shift = 0; shift <= 28 && p < limit; shift += 7) {
     uint32_t byte = *(reinterpret_cast<const uint8_t*>(p));
     p++;
-    if (byte & 128) {
+    if (byte & 128) { // 最高位是 1, 表示还有更多的字节
       // More bytes are present
-      result |= ((byte & 127) << shift);
+      result |= ((byte & 127) << shift); // 每个字节 7 位, 拼起来
     } else {
       result |= (byte << shift);
       *value = result;

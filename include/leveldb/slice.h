@@ -24,6 +24,7 @@
 
 namespace leveldb {
 
+// 其实可以认为就是一个字符串的简单封装(引用原数据)
 class LEVELDB_EXPORT Slice {
  public:
   // Create an empty slice.
