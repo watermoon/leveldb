@@ -978,8 +978,9 @@ Status VersionSet::Recover(bool* save_manifest) {
     prev_log_number_ = prev_log_number;
 
     // See if we can reuse the existing MANIFEST file.
+    // 尝试复用已经存在的 MANIFEST 文件
     if (ReuseManifest(dscname, current)) {
-      // No need to save new manifest
+      // No need to save new manifest 复用成功
     } else {
       *save_manifest = true;
     }
@@ -1027,6 +1028,8 @@ void VersionSet::MarkFileNumberUsed(uint64_t number) {
 
 void VersionSet::Finalize(Version* v) {
   // Precomputed best level for next compaction
+  // 预先计算最佳的压缩层级
+  // 所谓最佳即当前层级的文件大小除以最大文件大小的比率, 约大越接近最佳
   int best_level = -1;
   double best_score = -1;
 

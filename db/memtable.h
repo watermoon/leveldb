@@ -21,6 +21,7 @@ class MemTable {
  public:
   // MemTables are reference counted.  The initial reference count
   // is zero and the caller must call Ref() at least once.
+  // MemTables 是引用计数的。初始的引用计数为 0, 调用者必须至少调用一次 Ref()
   explicit MemTable(const InternalKeyComparator& comparator);
 
   MemTable(const MemTable&) = delete;
@@ -78,8 +79,8 @@ class MemTable {
 
   KeyComparator comparator_;
   int refs_;
-  Arena arena_;
-  Table table_;
+  Arena arena_; // 内存分配器
+  Table table_; // 跳表
 };
 
 }  // namespace leveldb

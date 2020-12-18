@@ -327,30 +327,36 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
   // Recover from all newer log files than the ones named in the
   // descriptor (new log files may have been added by the previous
   // incarnation without registering them in the descriptor).
+  // 从那些比描述符(descriptor)中记录的更新日志文件中恢复(更新的日志可能被
+  // 前一个 incarnation添加了, 但是没注册到描述符中)。
   //
   // Note that PrevLogNumber() is no longer used, but we pay
   // attention to it in case we are recovering a database
   // produced by an older version of leveldb.
+  // 注意到 PrevLogNumber() 不再使用, 不过我们需要注意到它以防我们
+  // 正在恢复一个旧版本的 leveldb 生成的数据库
   const uint64_t min_log = versions_->LogNumber();
   const uint64_t prev_log = versions_->PrevLogNumber();
   std::vector<std::string> filenames;
-  s = env_->GetChildren(dbname_, &filenames);
+  s = env_->GetChildren(dbname_, &filenames); // 获得目录下的所有文件
   if (!s.ok()) {
     return s;
   }
   std::set<uint64_t> expected;
-  versions_->AddLiveFiles(&expected);
+  versions_->AddLiveFiles(&expected); // versions_ 对应的所有日志文件名(数字)
   uint64_t number;
   FileType type;
   std::vector<uint64_t> logs;
   for (size_t i = 0; i < filenames.size(); i++) {
     if (ParseFileName(filenames[i], &number, &type)) {
       expected.erase(number);
+      // number >= min_log: 比 descriptor 中的文件新
+      // number == prev_log: 旧版本的 leveldb 生成的数据库日志
       if (type == kLogFile && ((number >= min_log) || (number == prev_log)))
-        logs.push_back(number);
+        logs.push_back(number); // 记录所有的日志文件名，以被后面恢复
     }
   }
-  if (!expected.empty()) {
+  if (!expected.empty()) { // 有些文件没找到, 报错
     char buf[50];
     std::snprintf(buf, sizeof(buf), "%d missing files; e.g.",
                   static_cast<int>(expected.size()));
@@ -358,8 +364,10 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
   }
 
   // Recover in the order in which the logs were generated
+  // 按生成的顺序恢复日志文件
   std::sort(logs.begin(), logs.end());
   for (size_t i = 0; i < logs.size(); i++) {
+    // TODO: 需要细看 RecoverLogFile 的逻辑
     s = RecoverLogFile(logs[i], (i == logs.size() - 1), save_manifest, edit,
                        &max_sequence);
     if (!s.ok()) {
@@ -1477,6 +1485,7 @@ Status DB::Delete(const WriteOptions& opt, const Slice& key) {
 
 DB::~DB() = default;
 
+// 数据库打开流程还蛮复杂的, 需要再👀
 Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
   *dbptr = nullptr;
 
