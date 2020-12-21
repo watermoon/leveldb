@@ -193,7 +193,7 @@ class LookupKey {
   ~LookupKey();
 
   // Return a key suitable for lookup in a MemTable.
-  // 包含 user_key 的长度(varint 编码) 和 sequence 和 类型(编码成 8 字节编码)
+  // 包含 user_key 的长度(varint 编码) 和 sequence &x 类型(编码成 8 字节编码)
   Slice memtable_key() const { return Slice(start_, end_ - start_); }
 
   // Return an internal key (suitable for passing to an internal iterator)

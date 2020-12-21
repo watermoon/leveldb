@@ -44,16 +44,21 @@ class MemTable {
   size_t ApproximateMemoryUsage();
 
   // Return an iterator that yields the contents of the memtable.
+  // 返回一个产生 memtable 内容的迭代器
   //
   // The caller must ensure that the underlying MemTable remains live
   // while the returned iterator is live.  The keys returned by this
   // iterator are internal keys encoded by AppendInternalKey in the
   // db/format.{h,cc} module.
+  // 调用者必须保证迭代器存活期间其底层的 MemTable 也存活。这个迭代器返回的 keys
+  // 是经过 db/format.{h,cc} 模块的 AppendInternalKey 编码后的内部 keys
   Iterator* NewIterator();
 
   // Add an entry into memtable that maps key to value at the
   // specified sequence number and with the specified type.
   // Typically value will be empty if type==kTypeDeletion.
+  // 添加一个条目到 memtable, 以指定的序列号和类型将 key 映射到 value。
+  // 特别地， 如果 type == kTypeDeletion, value 的值为空
   void Add(SequenceNumber seq, ValueType type, const Slice& key,
            const Slice& value);
 
@@ -61,6 +66,10 @@ class MemTable {
   // If memtable contains a deletion for key, store a NotFound() error
   // in *status and return true.
   // Else, return false.
+  // 如果 memtable 包含 key, 将它的值保存在 *value 并返回 true
+  // 如果 memtable 包含 的 key 已经被删除, 将 NotFound() 错误保存在 *status,
+  //   并返回 true
+  // 否则, 返回 false
   bool Get(const LookupKey& key, std::string* value, Status* s);
 
  private:

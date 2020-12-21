@@ -38,6 +38,7 @@ namespace leveldb {
 
 class Arena;
 
+// TODO: 跳表实现需要好好看看, 学习一下
 template <typename Key, class Comparator>
 class SkipList {
  private:

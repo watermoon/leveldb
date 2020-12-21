@@ -296,7 +296,7 @@ class VersionSet {
   Env* const env_;
   const std::string dbname_;
   const Options* const options_;
-  TableCache* const table_cache_;
+  TableCache* const table_cache_; // LRU
   const InternalKeyComparator icmp_;
   uint64_t next_file_number_;
   uint64_t manifest_file_number_;

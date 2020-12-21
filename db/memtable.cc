@@ -112,6 +112,8 @@ bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
     // Check that it belongs to same user key.  We do not check the
     // sequence number since the Seek() call above should have skipped
     // all entries with overly large sequence numbers.
+    // 检查它是否属于相同的 user key。我们不检查序列号, 因为上面的 Seek() 函数
+    // 应该以及跳过了所有序列号过大的条目
     const char* entry = iter.key();
     uint32_t key_length;
     const char* key_ptr = GetVarint32Ptr(entry, entry + 5, &key_length);
@@ -125,7 +127,7 @@ bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
           value->assign(v.data(), v.size());
           return true;
         }
-        case kTypeDeletion:
+        case kTypeDeletion: // 已删除
           *s = Status::NotFound(Slice());
           return true;
       }

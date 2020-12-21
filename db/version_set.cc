@@ -283,6 +283,7 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
   const Comparator* ucmp = vset_->icmp_.user_comparator();
 
   // Search level-0 in order from newest to oldest.
+  // 先从最新到最旧(文件的 number)地搜索 level-0 文件(key 有交叠, 所以需要全部搜)
   std::vector<FileMetaData*> tmp;
   tmp.reserve(files_[0].size());
   for (uint32_t i = 0; i < files_[0].size(); i++) {
@@ -293,7 +294,7 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
     }
   }
   if (!tmp.empty()) {
-    std::sort(tmp.begin(), tmp.end(), NewestFirst);
+    std::sort(tmp.begin(), tmp.end(), NewestFirst); // 新到旧(number 降序)
     for (uint32_t i = 0; i < tmp.size(); i++) {
       if (!(*func)(arg, 0, tmp[i])) {
         return;
@@ -302,11 +303,13 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
   }
 
   // Search other levels.
+  // 搜索其它层
   for (int level = 1; level < config::kNumLevels; level++) {
     size_t num_files = files_[level].size();
     if (num_files == 0) continue;
 
     // Binary search to find earliest index whose largest key >= internal_key.
+    // 二分查找找到那一个最大的 key >= 待查 key 的最小的索引 (隐含: 每层文件 key 有序)
     uint32_t index = FindFile(vset_->icmp_, files_[level], internal_key);
     if (index < num_files) {
       FileMetaData* f = files_[level][index];
@@ -338,6 +341,7 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
     Status s;
     bool found;
 
+    // Match 函数返回值 true, 表示需要继续在其它文件查找
     static bool Match(void* arg, int level, FileMetaData* f) {
       State* state = reinterpret_cast<State*>(arg);
 
