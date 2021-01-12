@@ -105,8 +105,10 @@ class Limiter {
 //
 // Instances of this class are thread-friendly but not thread-safe, as required
 // by the SequentialFile API.
+// 什么叫 thread-friendly?
 class PosixSequentialFile final : public SequentialFile {
  public:
+  // filename 居然不是 const std::string& 类型
   PosixSequentialFile(std::string filename, int fd)
       : fd_(fd), filename_(filename) {}
   ~PosixSequentialFile() override { close(fd_); }
@@ -181,6 +183,7 @@ class PosixRandomAccessFile final : public RandomAccessFile {
     assert(fd != -1);
 
     Status status;
+    // pread 和其它 fread 区别是什么?
     ssize_t read_size = ::pread(fd, scratch, n, static_cast<off_t>(offset));
     *result = Slice(scratch, (read_size < 0) ? 0 : read_size);
     if (read_size < 0) {
@@ -228,6 +231,7 @@ class PosixMmapReadableFile final : public RandomAccessFile {
     mmap_limiter_->Release();
   }
 
+  // scratch 参数没用到, 为什么要有
   Status Read(uint64_t offset, size_t n, Slice* result,
               char* scratch) const override {
     if (offset + n > length_) {
@@ -519,6 +523,7 @@ class PosixEnv : public Env {
       return PosixError(filename, errno);
     }
 
+    // mmap 达到了上限, 返回 PosixRandomAccessFile
     if (!mmap_limiter_.Acquire()) {
       *result = new PosixRandomAccessFile(filename, fd, &fd_limiter_);
       return Status::OK();
@@ -530,6 +535,7 @@ class PosixEnv : public Env {
       void* mmap_base =
           ::mmap(/*addr=*/nullptr, file_size, PROT_READ, MAP_SHARED, fd, 0);
       if (mmap_base != MAP_FAILED) {
+        // 返回 mmap 对象 PosixMmapReadableFile
         *result = new PosixMmapReadableFile(filename,
                                             reinterpret_cast<char*>(mmap_base),
                                             file_size, &mmap_limiter_);

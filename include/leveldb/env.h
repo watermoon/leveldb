@@ -60,8 +60,11 @@ class LEVELDB_EXPORT Env {
   // Return a default environment suitable for the current operating
   // system.  Sophisticated users may wish to provide their own Env
   // implementation instead of relying on this default environment.
+  // 返回一个适用于当前操作系统的默认环境。熟练的用户可能想实现自己的环境, 而不是使用
+  // 默认的(环境)。
   //
   // The result of Default() belongs to leveldb and must never be deleted.
+  // Default() 的返回结果属于 leveldb, 且必须永远不被删除
   static Env* Default();
 
   // Create an object that sequentially reads the file with the specified name.
@@ -69,8 +72,12 @@ class LEVELDB_EXPORT Env {
   // On failure stores nullptr in *result and returns non-OK.  If the file does
   // not exist, returns a non-OK status.  Implementations should return a
   // NotFound status when the file does not exist.
+  // 创建一个顺序读指定文件的对象。成功, 则指向新文件的指针保存在 *result, 且返回 OK。
+  // 失败 *result 则为空指针, 且返回非 OK。如果文件不存在, 返回非 OK。当文件不存在时,
+  // 实现应该返回一个 NotFound 状态.
   //
   // The returned file will only be accessed by one thread at a time.
+  // 返回的文件在同一时间将只会被一个线程访问.
   virtual Status NewSequentialFile(const std::string& fname,
                                    SequentialFile** result) = 0;
 
@@ -80,8 +87,10 @@ class LEVELDB_EXPORT Env {
   // returns non-OK.  If the file does not exist, returns a non-OK
   // status.  Implementations should return a NotFound status when the file does
   // not exist.
-  //
+  // 创建一个支持随机读访问的对象
+  // 
   // The returned file may be concurrently accessed by multiple threads.
+  // 返回的文件在可能被多个线程并发访问.
   virtual Status NewRandomAccessFile(const std::string& fname,
                                      RandomAccessFile** result) = 0;
 
@@ -90,8 +99,12 @@ class LEVELDB_EXPORT Env {
   // new file.  On success, stores a pointer to the new file in
   // *result and returns OK.  On failure stores nullptr in *result and
   // returns non-OK.
+  // 创建一个用于向指定文件进行写的对象。任何已存在的相同名字的文件都会被删除, 然后
+  // 创建一个新的文件。成功, *result 保存文件指针, 且返回 OK. 失败, *result 
+  // 保存空指针, 并返回非 OK.
   //
   // The returned file will only be accessed by one thread at a time.
+  // 返回的文件在同一时间只会被一个线程访问.
   virtual Status NewWritableFile(const std::string& fname,
                                  WritableFile** result) = 0;
 
@@ -102,11 +115,14 @@ class LEVELDB_EXPORT Env {
   // non-OK.
   //
   // The returned file will only be accessed by one thread at a time.
+  // 文件在同一时间只会被一个线程访问
   //
   // May return an IsNotSupportedError error if this Env does
   // not allow appending to an existing file.  Users of Env (including
   // the leveldb implementation) must be prepared to deal with
   // an Env that does not support appending.
+  // 可能会返回一个 IsNotSupprtedError 错误, 如果这个 Env 不允许追加到一个已经
+  // 存在的文件。用户的 Env(包括 leveldb 实现版本)必须可以处理一个不支持追的环境
   virtual Status NewAppendableFile(const std::string& fname,
                                    WritableFile** result);
 
@@ -171,17 +187,23 @@ class LEVELDB_EXPORT Env {
   // Lock the specified file.  Used to prevent concurrent access to
   // the same db by multiple processes.  On failure, stores nullptr in
   // *lock and returns non-OK.
+  // 锁定特定文件。被用于防止多个进程同事访问同一个 db。失败的话, *lock 是空指
+  // 针， 且返回非 OK
   //
   // On success, stores a pointer to the object that represents the
   // acquired lock in *lock and returns OK.  The caller should call
   // UnlockFile(*lock) to release the lock.  If the process exits,
   // the lock will be automatically released.
+  // 成功, *lock 会保存获得的锁的指针并返回 OK。调用者需要调用
+  // UnlockFile(*lock) 来释放锁。如果进程退出, 锁会自动被释放.
   //
   // If somebody else already holds the lock, finishes immediately
   // with a failure.  I.e., this call does not wait for existing locks
   // to go away.
+  // 如果其他人已经占有锁, 调用会立刻返回失败. 也就是说这个函数不会等待锁释放
   //
   // May create the named file if it does not already exist.
+  // 可能会创建文件, 如果文件不存在的话
   virtual Status LockFile(const std::string& fname, FileLock** lock) = 0;
 
   // Release the lock acquired by a previous successful call to LockFile.
@@ -195,6 +217,8 @@ class LEVELDB_EXPORT Env {
   // added to the same Env may run concurrently in different threads.
   // I.e., the caller may not assume that background work items are
   // serialized.
+  // "function" 可能会在不确定的线程中运行。多个加到同一个 Env 的函数可能会在
+  // 不同的线程同时运行着。也就是说, 调用者不能假设后台工作项是串行的
   virtual void Schedule(void (*function)(void* arg), void* arg) = 0;
 
   // Start a new thread, invoking "function(arg)" within the new thread.

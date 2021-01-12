@@ -1156,7 +1156,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
   }
 
   if (have_stat_update && current->UpdateStats(stats)) {
-    MaybeScheduleCompaction();
+    MaybeScheduleCompaction(); // 触发压缩调度(文件查询次数到阈值)
   }
   mem->Unref();
   if (imm != nullptr) imm->Unref();
@@ -1211,13 +1211,17 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
   MutexLock l(&mutex_);
   writers_.push_back(&w);
   while (!w.done && &w != writers_.front()) {
+    // 如果当前批写操作不是队列第一个, 则等待其它线程写完成
     w.cv.Wait();
   }
+  // 其它线程的批写完成了
+  // 注: levelDB 将所有线程的批写放到同一个队列, 然后由首个抢到锁的线程统一写入
   if (w.done) {
     return w.status;
   }
 
   // May temporarily unlock and wait.
+  // 中间可能临时释放锁并等待。确保 memtable 有足够的空间可以写入
   Status status = MakeRoomForWrite(updates == nullptr);
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
@@ -1230,6 +1234,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     // during this phase since &w is currently responsible for logging
     // and protects against concurrent loggers and concurrent writes
     // into mem_.
+    // 添加到日志和应用到 memtable。由于 &w 是当前负责写日志和保护并发写日志和写数据到 mem_
+    // 的, 所以我们可以在这个阶段释放锁。因为条件变量还在 Wait
     {
       mutex_.Unlock();
       status = log_->AddRecord(WriteBatchInternal::Contents(write_batch));
@@ -1240,7 +1246,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
           sync_error = true;
         }
       }
-      if (status.ok()) {
+      if (status.ok()) { // 写完日志, 写到 memtable
         status = WriteBatchInternal::InsertInto(write_batch, mem_);
       }
       mutex_.Lock();
@@ -1248,10 +1254,12 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
         // The state of the log file is indeterminate: the log record we
         // just added may or may not show up when the DB is re-opened.
         // So we force the DB into a mode where all future writes fail.
+        // 此时日志文件的状态时未决的: 当 DB 被重新打开的时候, 我们刚刚添加的记录可能存在
+        // 或不存在。所以我们强制 DB 进入一个状态, 在这个状态下后面的所有写都会失败
         RecordBackgroundError(status);
       }
     }
-    if (write_batch == tmp_batch_) tmp_batch_->Clear();
+    if (write_batch == tmp_batch_) tmp_batch_->Clear(); // BuildBatchGroup
 
     versions_->SetLastSequence(last_sequence);
   }
@@ -1262,14 +1270,14 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     if (ready != &w) {
       ready->status = status;
       ready->done = true;
-      ready->cv.Signal();
+      ready->cv.Signal(); // 唤醒等待的写线程
     }
     if (ready == last_writer) break;
   }
 
   // Notify new head of write queue
   if (!writers_.empty()) {
-    writers_.front()->cv.Signal();
+    writers_.front()->cv.Signal(); // 通知其他线程的写操作继续
   }
 
   return status;
@@ -1277,6 +1285,9 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
 
 // REQUIRES: Writer list must be non-empty
 // REQUIRES: First writer must have a non-null batch
+// 要求: writer 列表非空
+// 要求: 第一个 writer 必须有一个非空的批写
+// 返回一个合并后的批写, 将尽可能多的数据 append 到一起了
 WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
   mutex_.AssertHeld();
   assert(!writers_.empty());
@@ -1289,9 +1300,11 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
   // Allow the group to grow up to a maximum size, but if the
   // original write is small, limit the growth so we do not slow
   // down the small write too much.
-  size_t max_size = 1 << 20;
-  if (size <= (128 << 10)) {
-    max_size = size + (128 << 10);
+  // 允许组增长到最大值, 不过如果原始写(的数据量)比较小, 限制增长, 这样我们
+  // 才不会降低较小的写操作太多
+  size_t max_size = 1 << 20; // 1M
+  if (size <= (128 << 10)) { // 128K
+    max_size = size + (128 << 10); // 如果写操作不大于 128K
   }
 
   *last_writer = first;
@@ -1301,6 +1314,7 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
     Writer* w = *iter;
     if (w->sync && !first->sync) {
       // Do not include a sync write into a batch handled by a non-sync write.
+      // 不将同步写包含进由非同步写的批写中
       break;
     }
 
@@ -1308,6 +1322,7 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
       size += WriteBatchInternal::ByteSize(w->batch);
       if (size > max_size) {
         // Do not make batch too big
+        // 不要将批写弄得太大
         break;
       }
 
@@ -1318,6 +1333,7 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
         assert(WriteBatchInternal::Count(result) == 0);
         WriteBatchInternal::Append(result, first->batch);
       }
+      // 将 w->batch 的数据 append 到 result 上
       WriteBatchInternal::Append(result, w->batch);
     }
     *last_writer = w;
@@ -1327,6 +1343,8 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
 
 // REQUIRES: mutex_ is held
 // REQUIRES: this thread is currently at the front of the writer queue
+// 要求: 获得了互斥变量 mutex_
+// 要求: 当前线程是在写队列的第一个
 Status DBImpl::MakeRoomForWrite(bool force) {
   mutex_.AssertHeld();
   assert(!writers_.empty());
@@ -1345,6 +1363,10 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // individual write by 1ms to reduce latency variance.  Also,
       // this delay hands over some CPU to the compaction thread in
       // case it is sharing the same core as the writer.
+      // 我们已经接近达到 L0 文件数量的硬限制了。相比于达到硬限制时导致触发
+      // 限制的那次写操作延迟几秒钟, (在这里)开始对每一个单独写操作都延迟 1ms
+      // 来降低延迟抖动。同时, 这个延迟能将 CPU 释放给压缩线程, 如果它和写线程
+      // 共享同一个 CPU 内核的话。
       mutex_.Unlock();
       env_->SleepForMicroseconds(1000);
       allow_delay = false;  // Do not delay a single write more than once
@@ -1352,18 +1374,22 @@ Status DBImpl::MakeRoomForWrite(bool force) {
     } else if (!force &&
                (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
       // There is room in current memtable
+      // 不是强制写, 且 memtable 还有空间(没达到写 buffer 的大小)
       break;
     } else if (imm_ != nullptr) {
       // We have filled up the current memtable, but the previous
       // one is still being compacted, so we wait.
+      // memtable 已经写满了, 但是上一个 memtable(现在的 imm)还在进行压缩, 只能等
       Log(options_.info_log, "Current memtable full; waiting...\n");
       background_work_finished_signal_.Wait();
     } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {
       // There are too many level-0 files.
+      // level-0 文件太多了, 只能等
       Log(options_.info_log, "Too many L0 files; waiting...\n");
       background_work_finished_signal_.Wait();
     } else {
       // Attempt to switch to a new memtable and trigger compaction of old
+      // 尝试切换到新的 memtable, 并且触发一次压缩
       assert(versions_->PrevLogNumber() == 0);
       uint64_t new_log_number = versions_->NewFileNumber();
       WritableFile* lfile = nullptr;

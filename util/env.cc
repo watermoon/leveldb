@@ -22,6 +22,7 @@ Status Env::NewAppendableFile(const std::string& fname, WritableFile** result) {
   return Status::NotSupported("NewAppendableFile", fname);
 }
 
+// 这两组函数什么意思, 难道不会一直递归导致栈溢出吗?
 Status Env::RemoveDir(const std::string& dirname) { return DeleteDir(dirname); }
 Status Env::DeleteDir(const std::string& dirname) { return RemoveDir(dirname); }
 
