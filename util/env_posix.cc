@@ -792,6 +792,7 @@ void PosixEnv::Schedule(
   background_work_mutex_.Lock();
 
   // Start the background thread, if we haven't done so already.
+  // 如果还没启动后台线程, 则启动之
   if (!started_background_thread_) {
     started_background_thread_ = true;
     std::thread background_thread(PosixEnv::BackgroundThreadEntryPoint, this);
@@ -799,6 +800,7 @@ void PosixEnv::Schedule(
   }
 
   // If the queue is empty, the background thread may be waiting for work.
+  // 如果队列是空的, 后台线程可能出在一直死等的状态. 所以发个信号给它
   if (background_work_queue_.empty()) {
     background_work_cv_.Signal();
   }
