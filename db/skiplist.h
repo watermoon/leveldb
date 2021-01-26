@@ -38,6 +38,16 @@ namespace leveldb {
 
 class Arena;
 
+// 跳表
+// 结构
+// Node: 跳表各层的链表头节点(最大层级是 12)
+// head_: 跳表头指针, 每一层的指针均为 nullptr
+// 0: 包含所有节点
+// 1: 少一点
+// 2: 更少
+// ...
+// 12: 最高层
+
 // TODO: 跳表实现需要好好看看, 学习一下
 template <typename Key, class Comparator>
 class SkipList {
@@ -102,6 +112,7 @@ class SkipList {
  private:
   enum { kMaxHeight = 12 };
 
+  // 返回当前跳表最高层级, 初始值是 1
   inline int GetMaxHeight() const {
     return max_height_.load(std::memory_order_relaxed);
   }
@@ -115,17 +126,25 @@ class SkipList {
 
   // Return the earliest node that comes at or after key.
   // Return nullptr if there is no such node.
+  // 返回在位置 key 或者比 key 大的最早的节点
+  // 如果没有这样的节点, 则返回 nullptr
   //
   // If prev is non-null, fills prev[level] with pointer to previous
   // node at "level" for every level in [0..max_height_-1].
+  // 如果 prev 不是空指针, 用 [0.. max_height-1] 层的的上一个节点
+  // (previous node) 指针来填充 prev[level]
   Node* FindGreaterOrEqual(const Key& key, Node** prev) const;
 
   // Return the latest node with a key < key.
   // Return head_ if there is no such node.
+  // 返回比 key 小的最大的节点
+  // 如果没有这样的节点则返回 head_
   Node* FindLessThan(const Key& key) const;
 
   // Return the last node in the list.
   // Return head_ if list is empty.
+  // 返回跳表的最后一个节点
+  // 如果表为空, 则返回 head_
   Node* FindLast() const;
 
   // Immutable after construction
@@ -176,7 +195,9 @@ struct SkipList<Key, Comparator>::Node {
 
  private:
   // Array of length equal to the node height.  next_[0] is lowest level link.
-  std::atomic<Node*> next_[1];
+  // 数组的长度等于节点的高度(即节点添加时所在的层级). next_[0] 是最小层的链表, 指向下一个
+  // 节点(每个节点又是一个 Node)
+  std::atomic<Node*> next_[1]; // 用于将
 };
 
 template <typename Key, class Comparator>
@@ -184,7 +205,9 @@ typename SkipList<Key, Comparator>::Node* SkipList<Key, Comparator>::NewNode(
     const Key& key, int height) {
   char* const node_memory = arena_->AllocateAligned(
       sizeof(Node) + sizeof(std::atomic<Node*>) * (height - 1));
-  return new (node_memory) Node(key);
+  // sizeof(Node): head_ 的内存空间
+  // height - 1 个指针: 后面 height - 1 层的链表头指针
+  return new (node_memory) Node(key); // placement_new
 }
 
 template <typename Key, class Comparator>
@@ -242,8 +265,11 @@ inline void SkipList<Key, Comparator>::Iterator::SeekToLast() {
 template <typename Key, class Comparator>
 int SkipList<Key, Comparator>::RandomHeight() {
   // Increase height with probability 1 in kBranching
+  // kBranching 分之一的概率增加高度
   static const unsigned int kBranching = 4;
   int height = 1;
+  // 这里有极地的概率直接到 kMaxHeight - 1 层
+  // 概率 (1/4)^(kMaxHeight-2)
   while (height < kMaxHeight && ((rnd_.Next() % kBranching) == 0)) {
     height++;
   }
@@ -266,15 +292,19 @@ SkipList<Key, Comparator>::FindGreaterOrEqual(const Key& key,
   int level = GetMaxHeight() - 1;
   while (true) {
     Node* next = x->Next(level);
-    if (KeyIsAfterNode(key, next)) {
+    if (KeyIsAfterNode(key, next)) { // key 比当前节点大, 在当前层继续往后搜索
       // Keep searching in this list
+      // key 在 next 节点之后, 不符合条件. 递归进去查找
       x = next;
     } else {
+      // level 层找到一个 x < key && x.next > key 小的节点 (注意层级到高往低进行)
+      // 即 level key 应该在的位置
       if (prev != nullptr) prev[level] = x;
       if (level == 0) {
         return next;
       } else {
         // Switch to next list
+        // 到更低层的链表去查找
         level--;
       }
     }
@@ -328,7 +358,7 @@ SkipList<Key, Comparator>::SkipList(Comparator cmp, Arena* arena)
       arena_(arena),
       head_(NewNode(0 /* any key will do */, kMaxHeight)),
       max_height_(1),
-      rnd_(0xdeadbeef) {
+      rnd_(0xdeadbeef) { // dead beef 音乐播放器? 
   for (int i = 0; i < kMaxHeight; i++) {
     head_->SetNext(i, nullptr);
   }
@@ -338,16 +368,19 @@ template <typename Key, class Comparator>
 void SkipList<Key, Comparator>::Insert(const Key& key) {
   // TODO(opt): We can use a barrier-free variant of FindGreaterOrEqual()
   // here since Insert() is externally synchronized.
+  // TODO(opt): 这里我们可以用一个无内存栅栏的 FindGreaterOrEqual 变种函数, 因为
+  // Insert() 函数是外面同步的
   Node* prev[kMaxHeight];
   Node* x = FindGreaterOrEqual(key, prev);
 
   // Our data structure does not allow duplicate insertion
+  // 不允许插入相同的值
   assert(x == nullptr || !Equal(key, x->key));
 
   int height = RandomHeight();
-  if (height > GetMaxHeight()) {
+  if (height > GetMaxHeight()) { // 层级增加
     for (int i = GetMaxHeight(); i < height; i++) {
-      prev[i] = head_;
+      prev[i] = head_; // 在新增层中复制头指针(初始值)
     }
     // It is ok to mutate max_height_ without any synchronization
     // with concurrent readers.  A concurrent reader that observes
@@ -356,15 +389,25 @@ void SkipList<Key, Comparator>::Insert(const Key& key) {
     // the loop below.  In the former case the reader will
     // immediately drop to the next level since nullptr sorts after all
     // keys.  In the latter case the reader will use the new node.
+    // 这里可以在与并发读(操作)没有任何同步措施的情况下修改 max_height_ 变量
+    // 一个观察到 max_height_ 新的值的读(操作), 将会看到新的层指针是从 head_ 
+    // (nullptr) 来的旧值(初始化时设置), 或者在下面的循环中设置的新值.
+    // 前者会导致读(操作)立刻下降到下一层, 因为 nullptr 表示无限大。
+    // 后者则会使用新的节点
     max_height_.store(height, std::memory_order_relaxed);
   }
 
   x = NewNode(key, height);
-  for (int i = 0; i < height; i++) {
+  for (int i = 0; i < height; i++) { // 这里更新 [0, height) 层的链表
     // NoBarrier_SetNext() suffices since we will add a barrier when
     // we publish a pointer to "x" in prev[i].
+    // NoBarrier_SetNext 可以满足, 因为我们在 prev[i] 发布 一个指向 'x' 的
+    // 指针时会添加一个 barrier
     x->NoBarrier_SetNext(i, prev[i]->NoBarrier_Next(i));
     prev[i]->SetNext(i, x);
+    // 每一层中设置新节点 x 的下一个节点. 由于 prev[i] < x && prev[i].next > x 插入 x 后,
+    // 由 prev[i] -> prev[i].next
+    // => prev[i] -> x -> prev[i].next
   }
 }
 

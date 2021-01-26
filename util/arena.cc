@@ -40,11 +40,11 @@ char* Arena::AllocateAligned(size_t bytes) {
   static_assert((align & (align - 1)) == 0,
                 "Pointer size should be a power of 2");
   size_t current_mod = reinterpret_cast<uintptr_t>(alloc_ptr_) & (align - 1);
-  size_t slop = (current_mod == 0 ? 0 : align - current_mod);
-  size_t needed = bytes + slop;
+  size_t slop = (current_mod == 0 ? 0 : align - current_mod);  // 内存对齐需要补的字节数
+  size_t needed = bytes + slop;  // 内存对齐
   char* result;
   if (needed <= alloc_bytes_remaining_) {
-    result = alloc_ptr_ + slop;
+    result = alloc_ptr_ + slop;  // 在一大块内存(alloc_ptr_)中给你一段
     alloc_ptr_ += needed;
     alloc_bytes_remaining_ -= needed;
   } else {
