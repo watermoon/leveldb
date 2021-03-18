@@ -193,7 +193,7 @@ class LookupKey {
   ~LookupKey();
 
   // Return a key suitable for lookup in a MemTable.
-  // 包含 user_key 的长度(varint 编码) 和 sequence &x 类型(编码成 8 字节编码)
+  // 包含 user_key 的长度(varint 编码) 和 sequence & 类型(编码成 8 字节编码)
   Slice memtable_key() const { return Slice(start_, end_ - start_); }
 
   // Return an internal key (suitable for passing to an internal iterator)
@@ -212,9 +212,9 @@ class LookupKey {
   //                                    <-- end_
   // The array is a suitable MemTable key.
   // The suffix starting with "userkey" can be used as an InternalKey.
-  const char* start_;
-  const char* kstart_;
-  const char* end_;
+  const char* start_;   // 完整编码的开头
+  const char* kstart_;  // 不包含变长头的部分(实际数据 user_key 开始的地方)
+  const char* end_;     // 编码的结尾
   char space_[200];  // Avoid allocation for short keys
 };
 

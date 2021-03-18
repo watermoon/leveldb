@@ -115,6 +115,13 @@ bool InternalFilterPolicy::KeyMayMatch(const Slice& key, const Slice& f) const {
 }
 
 LookupKey::LookupKey(const Slice& user_key, SequenceNumber s) {
+  // 编码:
+  // 数据: (usize + 8) + user_key.data() + (s << 8) | kValueTypeForSeek
+  // 长度:  变长 int | usize | 8
+  //
+  // 因此 needed 需要 usize + 13(8 + 5) 才能确保可以编码任意 size_t 长度的 key,
+  // 其中 8 是最后编码的 seq + type, 5 则是 size_t 在变长编码情况下最多需要的字节
+  // 数
   size_t usize = user_key.size();
   size_t needed = usize + 13;  // A conservative estimate
   char* dst;
@@ -124,7 +131,7 @@ LookupKey::LookupKey(const Slice& user_key, SequenceNumber s) {
     dst = new char[needed];
   }
   start_ = dst;
-  dst = EncodeVarint32(dst, usize + 8);
+  dst = EncodeVarint32(dst, usize + 8);  // 为什么加 8?
   kstart_ = dst;
   std::memcpy(dst, user_key.data(), usize);
   dst += usize;

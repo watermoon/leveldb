@@ -99,7 +99,7 @@ void MemTable::Add(SequenceNumber s, ValueType type, const Slice& key,
 }
 
 bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
-  Slice memkey = key.memtable_key();
+  Slice memkey = key.memtable_key();  // memtable_key 是完整的 LookupKey 编码
   Table::Iterator iter(&table_);
   iter.Seek(memkey.data());
   if (iter.Valid()) {
@@ -113,14 +113,19 @@ bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
     // sequence number since the Seek() call above should have skipped
     // all entries with overly large sequence numbers.
     // 检查它是否属于相同的 user key。我们不检查序列号, 因为上面的 Seek() 函数
-    // 应该以及跳过了所有序列号过大的条目
+    // 应该应该跳过了所有序列号过大的条目
+    // 看比较函数(BytewiseComparatorImpl -> Slice.compare) 是先比较 key,
+    // 然后比较 (seq << 8) | type 编码后的 8 个字节
     const char* entry = iter.key();
     uint32_t key_length;
     const char* key_ptr = GetVarint32Ptr(entry, entry + 5, &key_length);
+    // 解码出 key_length: usize + 8 通过 varint 编码而来
+    // key_length - 8 才是整整的 user_key 的长度
     if (comparator_.comparator.user_comparator()->Compare(
             Slice(key_ptr, key_length - 8), key.user_key()) == 0) {
       // Correct user key
       const uint64_t tag = DecodeFixed64(key_ptr + key_length - 8);
+      // 解码最后的 8 个字节, 其中 tag 只占了一个字节
       switch (static_cast<ValueType>(tag & 0xff)) {
         case kTypeValue: {
           Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
